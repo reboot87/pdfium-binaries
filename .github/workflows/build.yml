@@ -91,10 +91,10 @@ jobs:
         run: |
           ARTIFACT="pdfium"
           [ "$PDFium_ENABLE_V8" == "true" ] && ARTIFACT="$ARTIFACT-v8"
-          [ "$PDFium_ENABLE_SKIA" == "true" ] && ARTIFACT="$ARTIFACT-skia"
           [ "$PDFium_TARGET_OS" != "emscripten" ] && ARTIFACT="$ARTIFACT-$PDFium_TARGET_OS"
           [ "$PDFium_TARGET_ENVIRONMENT" != "" ] && ARTIFACT="$ARTIFACT-$PDFium_TARGET_ENVIRONMENT"
           ARTIFACT="$ARTIFACT-$PDFium_TARGET_CPU"
+          [ "$PDFium_ENABLE_SKIA" == "true" ] && ARTIFACT="$ARTIFACT-skia"
           [ "$PDFium_BUILD_TYPE" == "static" ] && ARTIFACT="$ARTIFACT-static"
           [ "$IS_DEBUG" == "true" ] && ARTIFACT="$ARTIFACT-debug"
           echo "artifact=$ARTIFACT" >> $GITHUB_OUTPUT
