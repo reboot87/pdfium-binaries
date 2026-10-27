@@ -30,12 +30,13 @@ ninja -C "$BUILD" -t commands pdfium 2>/dev/null |
 
 # The linker flags themselves are in the response file (GN writes
 # {{ldflags}} into <output>.rsp on Windows), not in the command line above.
-RSP="$BUILD/pdfium.dll.rsp"
-if [ -f "$RSP" ]; then
+# The name varies with the output name and ninja may delete it again.
+RSP=$(ls "$BUILD"/pdfium*.rsp 2>/dev/null | head -n 1)
+if [ -n "$RSP" ]; then
   echo "=== $RSP ==="
   grep -Eio '(/|-)(subsystem|entry|libpath|defaultlib):[^ "]*' "$RSP" || true
 else
-  echo "No response file at $RSP"
+  echo "No pdfium*.rsp left in $BUILD (ninja removed it after linking)"
 fi
 
 PYTHON=$(command -v python || command -v python3)
