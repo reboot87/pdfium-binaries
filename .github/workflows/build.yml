@@ -138,17 +138,34 @@ jobs:
         run: |
           $yythunksVersion = "1.1.7"
           $arch = if ($env:PDFium_TARGET_CPU -eq "x64") { "x64" } elseif ($env:PDFium_TARGET_CPU -eq "x86") { "x86" } else { "$env:PDFium_TARGET_CPU" }
-          $url = "https://github.com/Chuyu-Team/YY-Thunks/releases/download/v$yythunksVersion/YY-Thunks-$yythunksVersion-$arch.zip"
-          Write-Host "Downloading YY-Thunks from $url"
-          Invoke-WebRequest -Uri $url -OutFile yy-thunks.zip
+          $apiUrl = "https://api.github.com/repos/Chuyu-Team/YY-Thunks/releases/tags/v$yythunksVersion"
+          Write-Host "Fetching release info from $apiUrl"
+          $headers = @{ "User-Agent" = "pdfium-binaries-xp" }
+          $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers
+          $assets = $release.assets
+          $asset = $assets | Where-Object { $_.name -match $arch -and $_.name -match '\.zip$' -and $_.name -notmatch 'pdb' -and $_.name -notmatch 'src' } | Select-Object -First 1
+          if (-not $asset) {
+            $asset = $assets | Where-Object { $_.name -match $arch -and $_.name -match '\.zip$' } | Select-Object -First 1
+          }
+          if (-not $asset) {
+            Write-Host "Assets:" 
+            $assets | ForEach-Object { Write-Host $_.name }
+            throw "No suitable YY-Thunks zip found for arch $arch"
+          }
+          $url = $asset.browser_download_url
+          Write-Host "Downloading YY-Thunks from $url ($($asset.name))"
+          Invoke-WebRequest -Uri $url -OutFile yy-thunks.zip -Headers $headers
           Expand-Archive -Path yy-thunks.zip -DestinationPath yy-thunks -Force
-          $libPath = Join-Path $PWD "yy-thunks\\lib\\$arch"
+          $libPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.lib" | ForEach-Object { $_.DirectoryName } | Where-Object { $_ -match $arch } | Select-Object -First 1
+          if (-not $libPath) {
+            $libPath = Join-Path $PWD "yy-thunks\\lib\\$arch"
+          }
           if (-not (Test-Path $libPath)) {
             $libPath = Join-Path $PWD "yy-thunks\\lib"
           }
           $incPath = Join-Path $PWD "yy-thunks\\include"
           Write-Host "YY-Thunks lib path: $libPath"
-          Get-ChildItem $libPath -ErrorAction SilentlyContinue
+          Get-ChildItem $libPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name)" }
           echo "YYTHUNKS_LIB=$libPath" >> $env:GITHUB_ENV
           echo "YYTHUNKS_INCLUDE=$incPath" >> $env:GITHUB_ENV
           echo "LIB=$libPath;$env:LIB" >> $env:GITHUB_ENV
