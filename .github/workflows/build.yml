@@ -143,29 +143,32 @@ jobs:
           $headers = @{ "User-Agent" = "pdfium-binaries-xp" }
           $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers
           $assets = $release.assets
-          $asset = $assets | Where-Object { $_.name -match $arch -and $_.name -match '\.zip$' -and $_.name -notmatch 'pdb' -and $_.name -notmatch 'src' } | Select-Object -First 1
+          $asset = $assets | Where-Object { $_.name -eq 'YY-Thunks-Lib.zip' } | Select-Object -First 1
           if (-not $asset) {
-            $asset = $assets | Where-Object { $_.name -match $arch -and $_.name -match '\.zip$' } | Select-Object -First 1
+            $asset = $assets | Where-Object { $_.name -match 'Lib' -and $_.name -match '\.zip$' } | Select-Object -First 1
           }
           if (-not $asset) {
             Write-Host "Assets:" 
             $assets | ForEach-Object { Write-Host $_.name }
-            throw "No suitable YY-Thunks zip found for arch $arch"
+            throw "YY-Thunks-Lib.zip not found"
           }
           $url = $asset.browser_download_url
           Write-Host "Downloading YY-Thunks from $url ($($asset.name))"
           Invoke-WebRequest -Uri $url -OutFile yy-thunks.zip -Headers $headers
           Expand-Archive -Path yy-thunks.zip -DestinationPath yy-thunks -Force
-          $libPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.lib" | ForEach-Object { $_.DirectoryName } | Where-Object { $_ -match $arch } | Select-Object -First 1
+          $libPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.lib" | ForEach-Object { $_.DirectoryName } | Where-Object { $_ -match [regex]::Escape($arch) } | Select-Object -First 1
           if (-not $libPath) {
-            $libPath = Join-Path $PWD "yy-thunks\\lib\\$arch"
+            $libPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.lib" | ForEach-Object { $_.DirectoryName } | Select-Object -First 1
           }
-          if (-not (Test-Path $libPath)) {
-            $libPath = Join-Path $PWD "yy-thunks\\lib"
+          if (-not $libPath) {
+            throw "No .lib found in YY-Thunks-Lib.zip"
           }
           $incPath = Join-Path $PWD "yy-thunks\\include"
+          if (-not (Test-Path $incPath)) {
+            $incPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.h" | ForEach-Object { $_.DirectoryName } | Select-Object -First 1
+          }
           Write-Host "YY-Thunks lib path: $libPath"
-          Get-ChildItem $libPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name)" }
+          Get-ChildItem $libPath -Filter "*.lib" | ForEach-Object { Write-Host "  $($_.Name)" }
           echo "YYTHUNKS_LIB=$libPath" >> $env:GITHUB_ENV
           echo "YYTHUNKS_INCLUDE=$incPath" >> $env:GITHUB_ENV
           echo "LIB=$libPath;$env:LIB" >> $env:GITHUB_ENV
