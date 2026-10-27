@@ -15,9 +15,12 @@ fi
 # The minimal checkout configuration sets checkout_skia=False, so the Skia
 # sources are skipped. Re-enable them when the Skia rendering backend is
 # requested, otherwise gn fails loading //third_party/skia/gn/codec.gni.
+# NOTE: the value must be the Python literal "True" (capital T), not the
+# string "true" -- gn requires checkout_skia to be a boolean and gclient
+# evaluates custom-var values as Python literals.
 if [ "$ENABLE_SKIA" == "true" ]; then
   CONFIG_ARGS+=(
-     --custom-var "checkout_skia=true"
+     --custom-var "checkout_skia=True"
   )
 fi
 
