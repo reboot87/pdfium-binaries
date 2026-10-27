@@ -15,7 +15,7 @@
 
 SOURCE=${PDFium_SOURCE_DIR:-pdfium}
 LIB_DIR_WIN=${YYTHUNKS_LIB_DIR:?}
-OBJ_WIN=${YYTHUNKS_OBJ:?}
+OBJ_WIN=${YYTHUNKS_OBJ:-}
 SDK_ARCH=${YYTHUNKS_SDK_ARCH:?}
 SUBSYSTEM=${YYTHUNKS_SUBSYSTEM:?}
 BUILD_TYPE=${PDFium_BUILD_TYPE:-shared}
@@ -33,10 +33,8 @@ PYTHON=$(command -v python || command -v python3)
 LIB_DIR=$(to_unix_path "$LIB_DIR_WIN")
 # GN/lld want forward slashes; no backslash escaping is needed then.
 GN_LIB_DIR=$(printf '%s' "$LIB_DIR_WIN" | sed -e 's|\\|/|g')
-GN_OBJ=$(printf '%s' "$OBJ_WIN" | sed -e 's|\\|/|g')
 
 echo "YY-Thunks library directory: $LIB_DIR_WIN"
-echo "YY-Thunks entry object:      $OBJ_WIN"
 echo "YY-Thunks subsystem:         $SUBSYSTEM"
 
 # --- 1. Replace the Windows SDK import libraries in place ---------------------
@@ -51,9 +49,13 @@ for root in "${SDK_ROOTS[@]}"; do
   [ -d "$root" ] || continue
   for um in "$root"/*/um/"$SDK_ARCH"; do
     [ -d "$um" ] || continue
+    # Only the import libraries are copied. The thunks entry point object is a
+    # member of those libraries already (kernel32.lib pulls it in with a
+    # /DEFAULTLIB: directive), and adding it a second time as a separate input
+    # makes lld-link fail with "duplicate symbol".
     for f in "$LIB_DIR"/*; do
       case "$(basename "$f")" in
-        *.Lib|*.lib|*.obj) cp -f "$f" "$um/" ;;
+        *.Lib|*.lib) cp -f "$f" "$um/" ;;
         *) ;;
       esac
     done
@@ -87,10 +89,10 @@ done
 # --- 3. Add the YY-Thunks link flags to the PDFium DLL target -----------------
 
 if [ "$BUILD_TYPE" == "shared" ]; then
-  "$PYTHON" - "$SOURCE/BUILD.gn" "$SUBSYSTEM" "$GN_OBJ" "$GN_LIB_DIR" <<'PY'
+  "$PYTHON" - "$SOURCE/BUILD.gn" "$SUBSYSTEM" "$GN_LIB_DIR" <<'PY'
 import sys
 
-path, subsystem, obj, lib_dir = sys.argv[1:5]
+path, subsystem, lib_dir = sys.argv[1:4]
 
 with open(path, encoding='utf-8') as f:
     source = f.read()
@@ -104,15 +106,16 @@ block = (
     '  if (is_win) {\n'
     '    # Windows XP support (YY-Thunks): the image must not require a newer\n'
     '    # subsystem version than the OS, and a DLL must enter through the\n'
-    '    # thunks CRT entry point so that thread_local does not crash XP.\n'
+    '    # thunks CRT entry point so that thread_local does not crash XP. The\n'
+    '    # entry point comes from YY-Thunks itself, which is on the library\n'
+    '    # search path and is also pulled in by the import libraries.\n'
     '    ldflags = [\n'
     '      "/SUBSYSTEM:WINDOWS,%s",\n'
     '      "/ENTRY:DllMainCRTStartupForYY_Thunks",\n'
     '      "/LIBPATH:%s",\n'
-    '      "%s",\n'
     '    ]\n'
     '  }\n'
-) % (subsystem, lib_dir, obj)
+) % (subsystem, lib_dir)
 block = block.replace('\n', nl)
 
 source = source.replace(anchor, anchor + nl + block, 1)
@@ -132,7 +135,6 @@ fi
   echo "## Windows XP link configuration"
   echo
   echo "- YY-Thunks library directory: \`$LIB_DIR_WIN\`"
-  echo "- YY-Thunks entry object: \`$OBJ_WIN\`"
   echo "- PE subsystem version: \`$SUBSYSTEM\`"
   echo "- Windows SDK import library directories replaced: \`$REPLACED\`"
   if [ "$BUILD_TYPE" == "shared" ]; then

@@ -154,17 +154,15 @@ jobs:
             throw "YY-Thunks library directory not found: $libDir"
           }
 
+          # The CRT entry point object is a member of the import libraries, so it
+          # is only reported here for troubleshooting, never linked separately.
           $obj = Get-ChildItem $libDir -Filter "YY_Thunks_for_*.obj" | Select-Object -First 1
-          if (-not $obj) {
-            throw "YY-Thunks entry point object not found in $libDir"
-          }
 
           Write-Host "YY-Thunks library directory: $libDir"
           Write-Host "YY-Thunks entry object: $($obj.FullName)"
           Get-ChildItem $libDir -Filter "*.lib" | ForEach-Object { Write-Host "  $($_.Name)" }
 
           echo "YYTHUNKS_LIB_DIR=$libDir" >> $env:GITHUB_ENV
-          echo "YYTHUNKS_OBJ=$($obj.FullName)" >> $env:GITHUB_ENV
           echo "YYTHUNKS_SDK_ARCH=$arch" >> $env:GITHUB_ENV
           echo "YYTHUNKS_SUBSYSTEM=$subsystem" >> $env:GITHUB_ENV
           echo "LIB=$libDir;$env:LIB" >> $env:GITHUB_ENV
