@@ -28,6 +28,16 @@ ninja -C "$BUILD" -t commands pdfium 2>/dev/null |
   tr ' ' '\n' |
   grep -Ei 'subsystem|entry|libpath|yy-thunks|\.obj$|/defaultlib' || true
 
+# The linker flags themselves are in the response file (GN writes
+# {{ldflags}} into <output>.rsp on Windows), not in the command line above.
+RSP="$BUILD/pdfium.dll.rsp"
+if [ -f "$RSP" ]; then
+  echo "=== $RSP ==="
+  grep -Eio '(/|-)(subsystem|entry|libpath|defaultlib):[^ "]*' "$RSP" || true
+else
+  echo "No response file at $RSP"
+fi
+
 PYTHON=$(command -v python || command -v python3)
 
 DLL="$DLL" "$PYTHON" - <<'PY'
@@ -129,6 +139,10 @@ everything = imports + delayed
 problems = []
 if major_sub > 5:
     problems.append('PE subsystem version %d.%d is newer than Windows XP (5.1)' % (major_sub, minor_sub))
+# lld-link copies the subsystem version into the OS version fields unless
+# /osversion says otherwise, so both are set by the same /SUBSYSTEM flag.
+if major_os > 5:
+    problems.append('PE minimum OS version %d.%d is newer than Windows XP (5.1)' % (major_os, minor_os))
 api_sets = [n for n in everything if n.lower().startswith(('api-ms-win-', 'ext-ms-win-'))]
 if api_sets:
     problems.append('imports API set DLLs: %s' % ', '.join(sorted(set(api_sets))))

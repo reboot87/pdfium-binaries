@@ -71,19 +71,40 @@ if [ "$REPLACED" -eq 0 ]; then
   exit 1
 fi
 
-# --- 2. Pin the PE subsystem version of the PDFium DLL ------------------------
+# --- 2. Pin the PE subsystem version -----------------------------------------
 #
-# PDFium links through Chromium's Windows toolchain, which hardcodes
-# "/SUBSYSTEM:* ,10.0" and says it only supports Windows 10 or later. Windows XP
-# refuses to load images whose subsystem version is newer than 5.1 (5.2 on XP
-# x64), so the suffix is lowered here as well, next to the per-target flags.
+# Chromium hardcodes the subsystem version in //build/config/win/BUILD.gn:
+#
+#   subsystem_version_suffix = ",10.0"
+#   config("console")  { ldflags = [ "/SUBSYSTEM:CONSOLE$subsystem_version_suffix" ] }
+#   config("windowed") { ldflags = [ "/SUBSYSTEM:WINDOWS$subsystem_version_suffix" ] }
+#
+# and //build/config/BUILDCONFIG.gn puts :console into the default configs of
+# every Windows target (executables *and* shared libraries), so every image
+# links with /SUBSYSTEM:*,10.0. Windows XP refuses to load images whose
+# subsystem version is newer than 5.1 (5.2 on XP x64), so the suffix is lowered
+# here, next to the per-target flags of step 3.
+#
+# The variable lives in build/config/win/BUILD.gn, not in the toolchain files,
+# so search for it instead of assuming a location. Some versions spell the
+# version inline ("/SUBSYSTEM:CONSOLE,10.0"), which the second expression
+# rewrites too.
 
-for f in "$SOURCE/build/toolchain/win/BUILD.gn" "$SOURCE/build/toolchain/win/toolchain.gni"; do
-  [ -f "$f" ] || continue
-  if grep -q 'subsystem_version_suffix' "$f"; then
-    sed -i "s|subsystem_version_suffix = \"[^\"]*\"|subsystem_version_suffix = \",$SUBSYSTEM\"|" "$f"
-    grep -n 'subsystem_version_suffix' "$f"
-  fi
+SUBSYSTEM_FILES=$(grep -rlI --exclude-dir=.git \
+  -e 'subsystem_version_suffix' -e '/SUBSYSTEM:' \
+  "$SOURCE/build/config" "$SOURCE/build/toolchain" 2>/dev/null || true)
+
+if [ -z "$SUBSYSTEM_FILES" ]; then
+  echo "WARNING: no file under build/config or build/toolchain mentions /SUBSYSTEM"
+fi
+
+for f in $SUBSYSTEM_FILES; do
+  sed -i -E \
+    -e "s|subsystem_version_suffix = \"[^\"]*\"|subsystem_version_suffix = \",$SUBSYSTEM\"|" \
+    -e "s|/SUBSYSTEM:([A-Za-z]+),10\.[0-9]+|/SUBSYSTEM:\1,$SUBSYSTEM|g" \
+    "$f"
+  echo "Patched subsystem version in: $f"
+  grep -n -E 'subsystem_version_suffix|/SUBSYSTEM:' "$f" | head -20
 done
 
 # --- 3. Add the YY-Thunks link flags to the PDFium DLL target -----------------
@@ -102,7 +123,15 @@ if anchor not in source:
     sys.exit('%s: %r not found' % (path, anchor))
 
 nl = '\r\n' if '\r\n' in source else '\n'
-block = (
+
+# The flags live in a config, not in the target: Chromium appends the ldflags
+# of the default configs (among them //build/config/win:console, i.e.
+# "/SUBSYSTEM:CONSOLE,10.0") *after* the target's own ldflags, and lld-link
+# keeps the last /SUBSYSTEM it sees, so a plain `ldflags` on the target is
+# silently overridden. Removing the console config leaves the XP config as the
+# only source of /SUBSYSTEM.
+config_block = (
+    'config("pdfium_xp_link") {\n'
     '  if (is_win) {\n'
     '    # Windows XP support (YY-Thunks): the image must not require a newer\n'
     '    # subsystem version than the OS, and a DLL must enter through the\n'
@@ -115,15 +144,32 @@ block = (
     '      "/LIBPATH:%s",\n'
     '    ]\n'
     '  }\n'
+    '}\n'
 ) % (subsystem, lib_dir)
-block = block.replace('\n', nl)
 
-source = source.replace(anchor, anchor + nl + block, 1)
+target_block = (
+    '  if (is_win) {\n'
+    '    # See config("pdfium_xp_link") above: drop Chromium\'s default\n'
+    '    # /SUBSYSTEM:CONSOLE and link the DLL with the XP subsystem version.\n'
+    '    configs -= [ "//build/config/win:console" ]\n'
+    '    configs += [ ":pdfium_xp_link" ]\n'
+    '  }\n'
+)
+
+config_block = config_block.replace('\n', nl)
+target_block = target_block.replace('\n', nl)
+
+source = source.replace(
+    anchor,
+    config_block + nl + anchor + nl + target_block,
+    1,
+)
 
 with open(path, 'w', encoding='utf-8', newline='') as f:
     f.write(source)
 
-print(block)
+print(config_block)
+print(target_block)
 PY
 else
   echo "Build type is '$BUILD_TYPE', not a DLL: skipping the link flag injection."
@@ -140,7 +186,7 @@ fi
   if [ "$BUILD_TYPE" == "shared" ]; then
     echo
     echo '```gn'
-    sed -n '/shared_library("pdfium") {/,/^  output_name/p' "$SOURCE/BUILD.gn"
+    sed -n '/^config("pdfium_xp_link") {/,/^  output_name/p' "$SOURCE/BUILD.gn"
     echo '```'
   fi
 } >>"${GITHUB_STEP_SUMMARY:-/dev/null}"
