@@ -65,7 +65,7 @@ jobs:
       actions: write # Upload workflow artifacts
     outputs:
       artifact: ${{ steps.init.outputs.artifact }}
-    runs-on: ${{ (inputs.target_os == 'ios' || inputs.target_os == 'mac') && 'macos-15' || inputs.target_os == 'win' && 'windows-2022' || 'ubuntu-24.04' }}
+    runs-on: ${{ (inputs.target_os == 'ios' || inputs.target_os == 'mac') && 'macos-15' || inputs.target_os == 'win' && 'windows-2019' || 'ubuntu-24.04' }}
     env:
       PDFium_BRANCH: ${{ inputs.branch }}
       PDFium_IS_DEBUG: ${{ inputs.is_debug }}
@@ -77,6 +77,7 @@ jobs:
       PDFium_VERSION: ${{ inputs.version }}
       EMSDK_VERSION: ${{ inputs.emsdk_version }}
       MUSL_URL: ${{ secrets.MUSL_URL }}
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
     steps:
       - name: Initialize
         id: init
@@ -112,6 +113,27 @@ jobs:
       - name: Install (2/2)
         run: steps/04-install-extras.sh
         shell: bash
+      - name: Setup YY-Thunks for Windows XP
+        if: ${{ inputs.target_os == 'win' }}
+        shell: pwsh
+        run: |
+          $yythunksVersion = "1.1.7"
+          $arch = if ($env:PDFium_TARGET_CPU -eq "x64") { "x64" } elseif ($env:PDFium_TARGET_CPU -eq "x86") { "x86" } else { "$env:PDFium_TARGET_CPU" }
+          $url = "https://github.com/Chuyu-Team/YY-Thunks/releases/download/v$yythunksVersion/YY-Thunks-$yythunksVersion-$arch.zip"
+          Write-Host "Downloading YY-Thunks from $url"
+          Invoke-WebRequest -Uri $url -OutFile yy-thunks.zip
+          Expand-Archive -Path yy-thunks.zip -DestinationPath yy-thunks -Force
+          $libPath = Join-Path $PWD "yy-thunks\\lib\\$arch"
+          if (-not (Test-Path $libPath)) {
+            $libPath = Join-Path $PWD "yy-thunks\\lib"
+          }
+          $incPath = Join-Path $PWD "yy-thunks\\include"
+          Write-Host "YY-Thunks lib path: $libPath"
+          Get-ChildItem $libPath -ErrorAction SilentlyContinue
+          echo "YYTHUNKS_LIB=$libPath" >> $env:GITHUB_ENV
+          echo "YYTHUNKS_INCLUDE=$incPath" >> $env:GITHUB_ENV
+          echo "LIB=$libPath;$env:LIB" >> $env:GITHUB_ENV
+          echo "INCLUDE=$incPath;$env:INCLUDE" >> $env:GITHUB_ENV
       - name: Configure
         run: |
           steps/05-configure.sh
