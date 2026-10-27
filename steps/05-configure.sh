@@ -33,12 +33,15 @@ mkdir -p "$BUILD"
     echo "v8_enable_i18n_support = false"
   fi
 
-  # When set, PDFium renders through Skia instead of the built-in AGG
-  # rasterizer. The Skia backend generally produces better-looking output
-  # (anti-aliasing, blend modes, text shaping) and is useful for A/B comparison
-  # against the default software path on Windows XP.
+  # Rendering backend selection. Set explicitly so the two artifacts form a
+  # clean A/B pair on Windows XP:
+  #   ENABLE_SKIA=true  -> pdf_use_skia = true  (Skia rendering backend)
+  #   ENABLE_SKIA=false -> pdf_use_skia = false (built-in AGG software rasterizer)
+  # (The upstream variable is "pdf_use_skia", not "pdfium_use_skia".)
   if [ "$ENABLE_SKIA" == "true" ]; then
-    echo "pdfium_use_skia = true"
+    echo "pdf_use_skia = true"
+  else
+    echo "pdf_use_skia = false"
   fi
 
   if [ "$BUILD_TYPE" == "static" ]; then
