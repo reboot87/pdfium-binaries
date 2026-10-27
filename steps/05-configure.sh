@@ -6,6 +6,7 @@ BUILD=${PDFium_BUILD_DIR:-$SOURCE/out}
 TARGET_CPU=${PDFium_TARGET_CPU:?}
 TARGET_ENVIRONMENT=${PDFium_TARGET_ENVIRONMENT:-}
 ENABLE_V8=${PDFium_ENABLE_V8:-false}
+ENABLE_SKIA=${PDFium_ENABLE_SKIA:-false}
 IS_DEBUG=${PDFium_IS_DEBUG:-false}
 BUILD_TYPE=${PDFium_BUILD_TYPE:-shared}
 
@@ -30,6 +31,14 @@ mkdir -p "$BUILD"
   if [ "$ENABLE_V8" == "true" ]; then
     echo "v8_use_external_startup_data = false"
     echo "v8_enable_i18n_support = false"
+  fi
+
+  # When set, PDFium renders through Skia instead of the built-in AGG
+  # rasterizer. The Skia backend generally produces better-looking output
+  # (anti-aliasing, blend modes, text shaping) and is useful for A/B comparison
+  # against the default software path on Windows XP.
+  if [ "$ENABLE_SKIA" == "true" ]; then
+    echo "pdfium_use_skia = true"
   fi
 
   if [ "$BUILD_TYPE" == "static" ]; then

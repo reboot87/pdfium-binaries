@@ -653,6 +653,20 @@ jobs:
       target_cpu: x64
       enable_v8: false
 
+  win_x64_skia:
+    name: Windows x64 (Skia)
+    permissions:
+      contents: read
+      actions: write # Upload workflow artifacts
+    uses: ./.github/workflows/build.yml
+    with:
+      branch: ${{ github.event.inputs.branch }}
+      version: ${{ github.event.inputs.version }}
+      is_debug: ${{ github.event.inputs.is_debug == 'true' }}
+      target_os: win
+      target_cpu: x64
+      enable_skia: true
+
   win_x64_v8:
     name: Windows x64 V8
     if: github.event.inputs.enable_v8 == 'true'
@@ -682,6 +696,20 @@ jobs:
       target_os: win
       target_cpu: x86
       enable_v8: false
+
+  win_x86_skia:
+    name: Windows x86 (Skia)
+    permissions:
+      contents: read
+      actions: write # Upload workflow artifacts
+    uses: ./.github/workflows/build.yml
+    with:
+      branch: ${{ github.event.inputs.branch }}
+      version: ${{ github.event.inputs.version }}
+      is_debug: ${{ github.event.inputs.is_debug == 'true' }}
+      target_os: win
+      target_cpu: x86
+      enable_skia: true
 
   win_x86_v8:
     name: Windows x86 V8

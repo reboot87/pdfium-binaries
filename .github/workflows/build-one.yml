@@ -48,6 +48,11 @@ on:
         type: boolean
         required: false
         default: false
+      enable_skia:
+        description: Enable Skia rendering backend
+        type: boolean
+        required: false
+        default: false
       emsdk_version:
         description: Emscripten SDK
         type: string
@@ -78,4 +83,5 @@ jobs:
       target_cpu: ${{ github.event.inputs.target_cpu }}
       target_environment: ${{ github.event.inputs.target_environment }}
       enable_v8: ${{ github.event.inputs.enable_v8 == 'true' }}
+      enable_skia: ${{ github.event.inputs.enable_skia == 'true' }}
       emsdk_version: ${{ github.event.inputs.emsdk_version }}

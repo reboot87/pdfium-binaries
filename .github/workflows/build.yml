@@ -18,6 +18,11 @@ on:
         type: boolean
         required: false
         default: false
+      enable_skia:
+        description: Enable Skia rendering backend
+        type: boolean
+        required: false
+        default: false
       is_debug:
         description: Is debug
         type: boolean
@@ -73,6 +78,7 @@ jobs:
       PDFium_TARGET_OS: ${{ inputs.target_os }}
       PDFium_TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
       PDFium_ENABLE_V8: ${{ inputs.enable_v8 }}
+      PDFium_ENABLE_SKIA: ${{ inputs.enable_skia }}
       PDFium_BUILD_TYPE: ${{ inputs.build_type }}
       PDFium_VERSION: ${{ inputs.version }}
       EMSDK_VERSION: ${{ inputs.emsdk_version }}
@@ -85,6 +91,7 @@ jobs:
         run: |
           ARTIFACT="pdfium"
           [ "$PDFium_ENABLE_V8" == "true" ] && ARTIFACT="$ARTIFACT-v8"
+          [ "$PDFium_ENABLE_SKIA" == "true" ] && ARTIFACT="$ARTIFACT-skia"
           [ "$PDFium_TARGET_OS" != "emscripten" ] && ARTIFACT="$ARTIFACT-$PDFium_TARGET_OS"
           [ "$PDFium_TARGET_ENVIRONMENT" != "" ] && ARTIFACT="$ARTIFACT-$PDFium_TARGET_ENVIRONMENT"
           ARTIFACT="$ARTIFACT-$PDFium_TARGET_CPU"
