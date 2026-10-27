@@ -97,25 +97,6 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Install v141_xp toolset for Windows XP
-        if: ${{ inputs.target_os == 'win' }}
-        shell: pwsh
-        run: |
-          $vsInstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-          $paths = @(
-            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise",
-            "C:\Program Files\Microsoft Visual Studio\2022\Professional",
-            "C:\Program Files\Microsoft Visual Studio\2022\Community"
-          )
-          $installPath = $null
-          foreach ($p in $paths) { if (Test-Path $p) { $installPath = $p; break } }
-          if ($vsInstaller -and (Test-Path $vsInstaller) -and $installPath) {
-            Write-Host "Installing VC++ v141.xp to $installPath"
-            Start-Process -Wait -FilePath $vsInstaller -ArgumentList @("modify", "--installPath", $installPath, "--add", "Microsoft.VisualStudio.Component.VC.v141.xp", "--quiet", "--norestart", "--force")
-            Write-Host "Done"
-          } else {
-            Write-Host "vs_installer or install path not found"
-          }
       - name: Set environment variables
         run: steps/00-environment.sh
         shell: bash
@@ -136,43 +117,61 @@ jobs:
         if: ${{ inputs.target_os == 'win' }}
         shell: pwsh
         run: |
+          # YY-Thunks folder names are the minimum supported Windows version:
+          # 5.1.2600.0 is Windows XP, 5.2.3790.1830 is Windows XP x64 / Server 2003.
+          if ($env:PDFium_TARGET_CPU -eq "x86") {
+            $minOs = "5.1.2600.0"
+            $arch = "x86"
+            $subsystem = "5.01"
+          } elseif ($env:PDFium_TARGET_CPU -eq "x64") {
+            $minOs = "5.2.3790.1830"
+            $arch = "x64"
+            $subsystem = "5.02"
+          } else {
+            throw "Windows XP support is only available for x86 and x64, not $env:PDFium_TARGET_CPU"
+          }
+
           $yythunksVersion = "1.1.7"
-          $arch = if ($env:PDFium_TARGET_CPU -eq "x64") { "x64" } elseif ($env:PDFium_TARGET_CPU -eq "x86") { "x86" } else { "$env:PDFium_TARGET_CPU" }
+          $headers = @{ "User-Agent" = "pdfium-binaries-xp" }
           $apiUrl = "https://api.github.com/repos/Chuyu-Team/YY-Thunks/releases/tags/v$yythunksVersion"
           Write-Host "Fetching release info from $apiUrl"
-          $headers = @{ "User-Agent" = "pdfium-binaries-xp" }
           $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers
-          $assets = $release.assets
-          $asset = $assets | Where-Object { $_.name -eq 'YY-Thunks-Lib.zip' } | Select-Object -First 1
+          $asset = $release.assets | Where-Object { $_.name -eq 'YY-Thunks-Lib.zip' } | Select-Object -First 1
           if (-not $asset) {
-            $asset = $assets | Where-Object { $_.name -match 'Lib' -and $_.name -match '\.zip$' } | Select-Object -First 1
+            Write-Host "Assets:"
+            $release.assets | ForEach-Object { Write-Host $_.name }
+            throw "YY-Thunks-Lib.zip not found in release v$yythunksVersion"
           }
-          if (-not $asset) {
-            Write-Host "Assets:" 
-            $assets | ForEach-Object { Write-Host $_.name }
-            throw "YY-Thunks-Lib.zip not found"
-          }
-          $url = $asset.browser_download_url
-          Write-Host "Downloading YY-Thunks from $url ($($asset.name))"
-          Invoke-WebRequest -Uri $url -OutFile yy-thunks.zip -Headers $headers
+
+          Write-Host "Downloading $($asset.name)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile yy-thunks.zip -Headers $headers
           Expand-Archive -Path yy-thunks.zip -DestinationPath yy-thunks -Force
-          $libPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.lib" | ForEach-Object { $_.DirectoryName } | Where-Object { $_ -match [regex]::Escape($arch) } | Select-Object -First 1
-          if (-not $libPath) {
-            $libPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.lib" | ForEach-Object { $_.DirectoryName } | Select-Object -First 1
+
+          $libDir = Join-Path $PWD "yy-thunks\Lib\$minOs\$arch"
+          if (-not (Test-Path $libDir)) {
+            Write-Host "Available lib directories:"
+            Get-ChildItem "$PWD\yy-thunks\Lib" -Directory | ForEach-Object { Write-Host "  $($_.Name)" }
+            throw "YY-Thunks library directory not found: $libDir"
           }
-          if (-not $libPath) {
-            throw "No .lib found in YY-Thunks-Lib.zip"
+
+          $obj = Get-ChildItem $libDir -Filter "YY_Thunks_for_*.obj" | Select-Object -First 1
+          if (-not $obj) {
+            throw "YY-Thunks entry point object not found in $libDir"
           }
-          $incPath = Join-Path $PWD "yy-thunks\\include"
-          if (-not (Test-Path $incPath)) {
-            $incPath = Get-ChildItem -Path yy-thunks -Recurse -Filter "*.h" | ForEach-Object { $_.DirectoryName } | Select-Object -First 1
-          }
-          Write-Host "YY-Thunks lib path: $libPath"
-          Get-ChildItem $libPath -Filter "*.lib" | ForEach-Object { Write-Host "  $($_.Name)" }
-          echo "YYTHUNKS_LIB=$libPath" >> $env:GITHUB_ENV
-          echo "YYTHUNKS_INCLUDE=$incPath" >> $env:GITHUB_ENV
-          echo "LIB=$libPath;$env:LIB" >> $env:GITHUB_ENV
-          echo "INCLUDE=$incPath;$env:INCLUDE" >> $env:GITHUB_ENV
+
+          Write-Host "YY-Thunks library directory: $libDir"
+          Write-Host "YY-Thunks entry object: $($obj.FullName)"
+          Get-ChildItem $libDir -Filter "*.lib" | ForEach-Object { Write-Host "  $($_.Name)" }
+
+          echo "YYTHUNKS_LIB_DIR=$libDir" >> $env:GITHUB_ENV
+          echo "YYTHUNKS_OBJ=$($obj.FullName)" >> $env:GITHUB_ENV
+          echo "YYTHUNKS_SDK_ARCH=$arch" >> $env:GITHUB_ENV
+          echo "YYTHUNKS_SUBSYSTEM=$subsystem" >> $env:GITHUB_ENV
+          echo "LIB=$libDir;$env:LIB" >> $env:GITHUB_ENV
+      - name: Configure Windows XP link (YY-Thunks)
+        if: ${{ inputs.target_os == 'win' }}
+        run: steps/04b-yy-thunks.sh
+        shell: bash
       - name: Configure
         run: |
           steps/05-configure.sh
@@ -186,6 +185,10 @@ jobs:
         shell: bash
       - name: Build
         run: steps/06-build.sh
+        shell: bash
+      - name: Verify Windows XP compatibility
+        if: ${{ inputs.target_os == 'win' }}
+        run: steps/07a-xp-check.sh
         shell: bash
       - name: Stage
         run: steps/07-stage.sh

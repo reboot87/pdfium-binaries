@@ -5,10 +5,8 @@ BUILD_DIR=${PDFium_BUILD_DIR:-$SOURCE/out}
 TARGET_CPU=${PDFium_TARGET_CPU:?}
 IS_DEBUG=${PDFium_IS_DEBUG:-false}
 
-if [ "${PDFium_TARGET_OS:-}" == "win" ] && [ -n "${YYTHUNKS_LIB:-}" ]; then
-  export LIB="${YYTHUNKS_LIB};${LIB:-}"
-  export INCLUDE="${YYTHUNKS_INCLUDE:-};${INCLUDE:-}"
-  echo "Using YY-Thunks from $YYTHUNKS_LIB"
+if [ "${PDFium_TARGET_OS:-}" == "win" ] && [ -n "${YYTHUNKS_LIB_DIR:-}" ]; then
+  echo "Building with YY-Thunks from $YYTHUNKS_LIB_DIR (see steps/04b-yy-thunks.sh)"
 fi
 
 ninja -C "$BUILD_DIR" pdfium

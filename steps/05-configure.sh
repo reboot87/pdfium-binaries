@@ -22,24 +22,10 @@ mkdir -p "$BUILD"
   echo "treat_warnings_as_errors = false"
   echo "is_component_build = false"
 
-  if [ "$OS" == "win" ]; then
-    echo "winver = 0x0501"
-    echo "win32_winnt = 0x0501"
-    echo "ntddi_version = 0x05010300"
-    echo "win_enable_cfg_guards = false"
-    echo "subsystem_version = \"5.01\""
-    if [ -n "${YYTHUNKS_LIB:-}" ]; then
-      YYTHUNKS_LIB_CLEAN="${YYTHUNKS_LIB//\\/\\\\}"
-      echo "extra_ldflags = [ \"/LIBPATH:$YYTHUNKS_LIB_CLEAN\", \"/DEFAULTLIB:YY_Thunks_for_WinXP.lib\", \"/DEFAULTLIB:YY_Thunks_for_Vista.lib\" ]"
-    elif [ -n "${LIB:-}" ]; then
-      # Extract first path if multiple
-      FIRST_LIB="$(echo "$LIB" | cut -d';' -f1)"
-      if [ -n "$FIRST_LIB" ]; then
-        FIRST_LIB_CLEAN="${FIRST_LIB//\\/\\\\}"
-        echo "extra_ldflags = [ \"/LIBPATH:$FIRST_LIB_CLEAN\", \"/DEFAULTLIB:YY_Thunks_for_WinXP.lib\", \"/DEFAULTLIB:YY_Thunks_for_Vista.lib\" ]"
-      fi
-    fi
-  fi
+  # Windows XP compatibility is not configured here: Chromium's GN files have no
+  # winver/ntddi_version/subsystem_version build arguments, and GN does not
+  # accept hexadecimal numbers. The subsystem version, the YY-Thunks import
+  # libraries and the DLL entry point are wired up by steps/04b-yy-thunks.sh.
 
   if [ "$ENABLE_V8" == "true" ]; then
     echo "v8_use_external_startup_data = false"
