@@ -915,7 +915,9 @@ jobs:
       - win_arm64_v8
       - win_x64
       - win_x64_v8
+      - win_x64_skia
       - win_x86
+      - win_x86_skia
       - win_x86_v8
     permissions:
       contents: write # to create releases
@@ -974,3 +976,49 @@ jobs:
           GH_REPO: ${{ github.repository }}
           BRANCH: ${{ github.event.inputs.branch }}
           VERSION: ${{ github.event.inputs.version }}
+
+  rolling:
+    name: Publish rolling Release
+    if: github.event.inputs.release == 'true'
+    runs-on: ubuntu-latest
+    needs:
+      - win_x86
+      - win_x64
+      - win_x86_skia
+      - win_x64_skia
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package as zip
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/artifacts"
+          shopt -s nullglob
+          for DIR in pdfium-win-*/; do
+            name="${DIR%/}"
+            ( cd "$DIR" && zip -r "$GITHUB_WORKSPACE/${name}.zip" . )
+          done
+          ls -lh "$GITHUB_WORKSPACE"/pdfium-win-*.zip
+      - name: Publish to continuous Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG=continuous
+          gh release delete "$TAG" --yes --delete-tag 2>/dev/null || true
+          cat > RELEASE.md <<'EOF'
+          Automated Windows builds of PDFium for Windows XP.
+          - pdfium-win-x86 / pdfium-win-x64 : built-in AGG software rasterizer
+          - pdfium-win-x86-skia / pdfium-win-x64-skia : Skia rendering backend
+          All built with /MT (static CRT) + YY-Thunks for XP compatibility.
+          EOF
+          gh release create "$TAG" "$GITHUB_WORKSPACE"/pdfium-win-*.zip \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Rolling build (main)" \
+            --notes-file RELEASE.md
