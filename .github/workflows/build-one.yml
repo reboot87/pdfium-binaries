@@ -63,6 +63,11 @@ on:
         type: boolean
         required: false
         default: false
+      release:
+        description: Publish the artifact to the continuous GitHub Release
+        type: boolean
+        required: false
+        default: false
 
 permissions: {}
 
@@ -85,3 +90,36 @@ jobs:
       enable_v8: ${{ github.event.inputs.enable_v8 == 'true' }}
       enable_skia: ${{ github.event.inputs.enable_skia == 'true' }}
       emsdk_version: ${{ github.event.inputs.emsdk_version }}
+
+  publish:
+    name: Publish to Release
+    if: github.event.inputs.release == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package as zip
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/artifacts"
+          shopt -s nullglob
+          for DIR in pdfium-*/; do
+            name="${DIR%/}"
+            ( cd "$DIR" && zip -r "$GITHUB_WORKSPACE/${name}.zip" . )
+          done
+          ls -lh "$GITHUB_WORKSPACE"/pdfium-*.zip
+      - name: Publish to continuous Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG=continuous
+          gh release create "$TAG" --prerelease --title "Rolling build (main)" \
+            --notes "Automated Windows builds of PDFium for Windows XP, uploaded per-variant via build-one." 2>/dev/null || true
+          gh release upload "$TAG" "$GITHUB_WORKSPACE"/pdfium-*.zip --clobber
